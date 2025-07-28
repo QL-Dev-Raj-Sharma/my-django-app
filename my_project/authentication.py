@@ -4,6 +4,7 @@ from rest_framework.authentication import BaseAuthentication
 from django.conf import settings
 from rest_framework import exceptions
 from app.user.models import User
+from utils import Responder
 
 class UserTokenAuthentication(BaseAuthentication):
     def authenticate(self, request):
@@ -19,21 +20,21 @@ class UserTokenAuthentication(BaseAuthentication):
     
             required_claims = ['user_id', 'iat', 'exp']
             if not all(claim in payload for claim in required_claims):
-                raise exceptions.AuthenticationFailed('Invalid token claims')
+                Responder.raise_error(901)
                 
             
             if payload['exp'] < int(time.time()):
-                raise exceptions.AuthenticationFailed('Token has expired')
+                Responder.raise_error(902)
                 
             user = User.objects.get(pk=payload['user_id'])
             
         
             if user.access_token_created_at != payload['iat']:
-                raise exceptions.AuthenticationFailed('Token invalidated')
+                Responder.raise_error(903)
                 
             return (user, None)
             
         except jwt.ExpiredSignatureError:
-            raise exceptions.AuthenticationFailed('Token has expired')
+            Responder.raise_error(904)
         except (jwt.InvalidTokenError, User.DoesNotExist):
-            raise exceptions.AuthenticationFailed('Invalid token')
+            Responder.raise_error(905)

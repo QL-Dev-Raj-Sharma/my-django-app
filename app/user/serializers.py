@@ -1,4 +1,5 @@
 import re
+import uuid
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
@@ -14,14 +15,12 @@ from utils import (
 
 
 class RegisterSerializer(serializers.Serializer):
-
     username = serializers.CharField(max_length=150, write_only=True, required=False)
     email = serializers.EmailField(write_only=True, required=True)
     phone = serializers.CharField(max_length=15, write_only=True, required=False)
     first_name = serializers.CharField(max_length=50, write_only=True, required=False)
     last_name = serializers.CharField(max_length=100, write_only=True, required=False)
     bio = serializers.CharField(max_length=500, write_only=True, required=False)
-    
     password = serializers.CharField(max_length=128, write_only=True, required=False)
     confirm_password = serializers.CharField(max_length=128, write_only=True, required=False)
     otp = serializers.CharField(max_length=6, write_only=True, required=False)
@@ -32,25 +31,24 @@ class RegisterSerializer(serializers.Serializer):
         phone = attrs.get('phone', None)
         password = attrs.get('password')
         
-        self._validate_existing_user(email, username, phone)
-    
-        if phone:
-            self._validate_phone_number(phone)
-        
         registration_otp = RegistrationOtp.objects.get_by_email(email)
         
         if 'otp' in attrs:
-            # OTP verification step
+            # OTP verification step - check if user exists before verifying OTP
+            self._validate_existing_user(email=email, username=username, phone=phone)
             self._validate_otp(registration_otp, attrs['otp'])
         elif not password:
-            # Initial registration - send OTP
+            # Initial registration step - check if user exists before sending OTP
+            self._validate_existing_user(email=email, username=username, phone=phone)
+            if phone:
+                self._validate_phone_number(phone)
             self._handle_initial_registration(attrs, email, registration_otp)
-        
-        if registration_otp and password:
-            # Final registration step
-            self._validate_password_confirmation(
-                attrs['password'], attrs['confirm_password']
-            )
+        else:
+            self._validate_existing_user(email=email, username=username, phone=phone)
+            if phone:
+                self._validate_phone_number(phone)
+            if registration_otp:
+                self._validate_password_confirmation(attrs['password'], attrs['confirm_password'])
         
         attrs['registration_otp'] = registration_otp
         return attrs
@@ -62,50 +60,53 @@ class RegisterSerializer(serializers.Serializer):
             return {}
         
         user = self._create_user_from_otp(registration_otp, validated_data)
-        
         registration_otp.delete()
         return user.login('email')
 
-    def _validate_existing_user(self, email, username, phone):
-        if User.objects.filter(email=email).exists():
-            Responder.raise_error(135)  # "Email exists"
+    def _validate_existing_user(self, **fields):
+        email = fields.get('email')
+        username = fields.get('username')  
+        phone = fields.get('phone')
         
-        if username and User.objects.filter(username=username).exists():
-            Responder.raise_error(134)  # "Username exists"
+        if email and User.objects.get_by_email(email):
+            Responder.raise_error(119)
+        if username and User.objects.get_by_username(username):
+            Responder.raise_error(120)
             
         if phone and User.objects.filter(phone=phone).exists():
-            Responder.raise_error(136)  # "Phone number exists"
+            Responder.raise_error(121)
 
     def _validate_phone_number(self, phone):
         if phone and (re.match(r'^\+(1|91)\d+', phone)):
             return phone
-        Responder.raise_error(137)  # "Invalid Indian phone number format"
+        Responder.raise_error(122)
 
     def _validate_otp(self, registration_otp, otp):
-        """Validate OTP"""
         if not registration_otp or self._is_otp_expired(registration_otp.created_at):
             Responder.raise_error(117)  # "OTP expired or invalid"
         if registration_otp.otp != otp:
-            Responder.raise_error(118)  # "Invalid OTP"
+            Responder.raise_error(804)  # "Invalid OTP"
 
     def _handle_initial_registration(self, attrs, email, registration_otp):
-        """Handle initial registration and send OTP"""
         otp = Generator.generate_otp()
-        
         if registration_otp:
             RegistrationOtp.objects.handle_existing_otp(registration_otp, otp)
         else:
             RegistrationOtp.objects.create_new_otp(email, otp)
-        
         self._send_otp_email(email, otp)
 
     def _validate_password_confirmation(self, password, confirm_password):
         if password != confirm_password:
-            Responder.raise_error(154)
+            Responder.raise_error(124) 
 
     def _create_user_from_otp(self, registration_otp, attrs):
+        username = attrs.get('username')
+        if not username:
+            base_username = registration_otp.email.split('@')[0]
+            username = self._generate_numbered_username(base_username)
+        
         return User.objects.create_user(
-            username=attrs.get('username', registration_otp.email.split('@')[0]),
+            username=username,
             email=registration_otp.email,
             phone=attrs.get('phone'),
             password=attrs['password'],
@@ -113,6 +114,19 @@ class RegisterSerializer(serializers.Serializer):
             last_name=attrs.get('last_name', ''),
             bio=attrs.get('bio', '')
         )
+
+    def _generate_numbered_username(self, base_username):
+        username = base_username
+        counter = 1
+        
+        if not User.objects.filter(username=username).exists():
+            return username
+            
+        while True:
+            numbered_username = f"{base_username}{counter}"
+            if not User.objects.filter(username=numbered_username).exists():
+                return numbered_username
+            counter += 1
 
     def _is_otp_expired(self, created_at, minutes=5):
         expiry_time = created_at + timedelta(minutes=minutes)
@@ -123,7 +137,6 @@ class RegisterSerializer(serializers.Serializer):
         message = f'Your OTP is: {otp}'
         from_email = settings.DEFAULT_FROM_EMAIL
         recipient_list = [email]
-
         send_mail(subject, message, from_email, recipient_list)
 
 
@@ -150,9 +163,9 @@ class UserLoginSerializer(serializers.Serializer):
 
     def _validate_required_fields(self, identifier, password):
         if not identifier:
-            Responder.raise_error(151)
+            Responder.raise_error(123)
         if not password:
-            Responder.raise_error(152)
+            Responder.raise_error(125)
 
     def _authenticate_user(self, identifier, password):
         user = User.objects.get_by_login_identifier(identifier, password)
@@ -173,11 +186,10 @@ class ChangePasswordSerializer(serializers.Serializer):
         
         user = self.context['request'].user
         if not user.check_password(old_password):
-            Responder.raise_error(155)
+            Responder.raise_error(126)
         
-        # Validate password confirmation
         if new_password != confirm_password:
-            Responder.raise_error(154)
+            Responder.raise_error(124)
         
         attrs['user'] = user
         return attrs
@@ -200,7 +212,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
         
         user = User.objects.filter(email=email).first()
         if not user:
-            Responder.raise_error(156)
+            Responder.raise_error(130)
         
         if 'otp' in attrs and 'new_password' in attrs:
             self._validate_password_reset(attrs, email)
@@ -218,7 +230,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
             user.set_password(validated_data['new_password'])
             user.save()
             RegistrationOtp.objects.filter(email=user.email).delete()
-            return {'message': 'Password reset successfully'}
+            return {'message': 'Password changed successfully'}
         return {}
 
     def _handle_otp_sending(self, email):
@@ -244,12 +256,12 @@ class ForgotPasswordSerializer(serializers.Serializer):
         if not registration_otp or self._is_otp_expired(registration_otp.created_at):
             Responder.raise_error(117)
         if registration_otp.otp != otp:
-            Responder.raise_error(118)
+            Responder.raise_error(804)
 
     def _validate_password_reset(self, attrs, email):
         self._validate_otp(email, attrs['otp'])
         if attrs['new_password'] != attrs['confirm_password']:
-            Responder.raise_error(154)
+            Responder.raise_error(124)
 
     def _is_otp_expired(self, created_at, minutes=5):
         expiry_time = created_at + timedelta(minutes=minutes)
@@ -259,25 +271,57 @@ class UserProfileSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     username = serializers.CharField(read_only=True)
     email = serializers.EmailField(read_only=True)
-    phone = serializers.CharField(read_only=True)
+    phone = serializers.CharField(
+        max_length=15,
+        required=False,
+        allow_blank=True,
+        allow_null=True
+    )
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
     full_name = serializers.SerializerMethodField()
     bio = serializers.CharField(required=False, allow_blank=True)
-    profile_picture = serializers.URLField(required=False, allow_blank=True)
+    profile_picture = serializers.URLField(required=False, allow_blank=True, write_only=True)
     date_joined = serializers.DateTimeField(read_only=True)
     last_login = serializers.DateTimeField(read_only=True)
 
     def get_full_name(self, user):
         return user.get_full_name()
 
+    def validate_phone(self, value):
+
+        if not value:
+            return value
+
+        if not re.match(r'^\+?[1-9]\d{1,14}$', value):
+            Responder.raise_error(122)
+            
+        user = self.instance
+        if User.objects.filter(phone=value).exclude(pk=user.pk).exists():
+            Responder.raise_error(805)
+            
+        return value
+
     def update(self, user, validated_data):
         user.first_name = validated_data.get('first_name', user.first_name)
         user.last_name = validated_data.get('last_name', user.last_name)
         user.bio = validated_data.get('bio', user.bio)
         user.profile_picture = validated_data.get('profile_picture', user.profile_picture)
+        
+        if 'phone' in validated_data:
+            phone = validated_data['phone']
+            if phone == '':
+                phone = None
+            user.phone = phone
+            
+        if 'profile_picture' in validated_data:
+            if user.profile_picture:
+                user.profile_picture.delete()
+            user.profile_picture = validated_data['profile_picture']
+            
         user.save()
         return user
+
 
 class PublicUserProfileSerializer(serializers.ModelSerializer):
 

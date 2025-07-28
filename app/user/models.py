@@ -1,25 +1,38 @@
 import jwt
 import time
+from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db.models import Q
-from django.utils import timezone
-from utils import Responder
+from django.utils.timezone import now
 from django.conf import settings
-
+from utils import Responder
 
 
 class RegistrationOtpManager(models.Manager):
     def get_by_email(self, email):
         return self.filter(email=email).first()
     
+    
     def create_new_otp(self, email, otp):
+        today = now().replace(hour=0, minute=0, second=0, microsecond=0)
+        otps = self.filter(email=email, created_at__gte=today).order_by('-created_at')
+
+        if otps.count() >= 5:
+            Responder.raise_error(801)
+
+        latest_otp = otps.first()
+        if latest_otp and (now() - latest_otp.created_at).total_seconds() < 60:
+            Responder.raise_error(802)
+
+        if latest_otp:
+            return self.handle_existing_otp(latest_otp, otp)
         return self.create(email=email, otp=otp)
     
     def handle_existing_otp(self, registration_otp, new_otp):
         registration_otp.otp = new_otp
         registration_otp.created_at = timezone.now()
-        registration_otp.save()
+        registration_otp.save(update_fields=['otp', 'created_at'])
         return registration_otp
 
 
@@ -38,6 +51,10 @@ class RegistrationOtp(models.Model):
 
 
 class UserManager(BaseUserManager):
+
+    def get_by_email(self, email):
+        return self.filter(email=email).first()
+    
     def create_user(self, username, email, phone=None, password=None, **extra_fields):
         if not username:
             Responder.raise_error(701)
@@ -58,6 +75,7 @@ class UserManager(BaseUserManager):
     
     def get_by_username(self, username):
         return self.filter(username=username).first()
+
 
 
 class User(AbstractBaseUser):
@@ -118,6 +136,8 @@ class User(AbstractBaseUser):
             'access_token': access_token
         }
     
+    def logout(self):
+        return self.update({'access_token_created_at': None})
     
     def get_profile_data(self):
 

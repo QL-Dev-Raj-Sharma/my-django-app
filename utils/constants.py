@@ -9,35 +9,73 @@ class Constant:
     }
 
     response_messages = {
-        124: "OTP sent successfully",
-        125: "OTP verified successfully",
-        138: "Registration completed successfully",
-        139: "Login successful",
-        140: "Password changed successfully",
-        141: "Password reset successfully",
-        142: "Profile fetched successfully",
-        143: "Profile updated successfully",
-        144: "Public profile fetched successfully",
-        303: "User deleted successfully",
 
+        #Registration and Login Codes
+
+        101: "Registration completed successfully",
         102: "Invalid credentials",
-        117: "OTP expired or invalid",
-        118: "Invalid OTP",
-        134: "Username already exists",
-        135: "Email already exists",
-        136: "Phone number already exists",
-        137: "Invalid Indian phone number format",
-        151: "Identifier is required",
-        152: "Password is required",
-        154: "Passwords do not match",
-        155: "Invalid old password",
-        156: "Email not found",
-        157: "User not found",
-        701: "Username required",
-        702: "Email required",
-        
-        508: "A required parameter or value is missing",
-        101: "User not found",
-        103: "User account is inactive",
+
+        110: "Login successful",
+        111: "User logout successfully",
+
+        112: "Password changed successfully",
+        113: "Password reset successfully",
+        124: "Passwords do not match",
+        125: "Password is required",
+        126: "Invalid old password",
+
+        114: "Profile fetched successfully",
+        115: "Profile updated successfully",
+        116: "User deleted successfully",
+        117: "Invalid password",
+
+        118: "User not found",
+
+        119: "Email already exists",
+        120: "Username already exists",
+        121: "Phone number already exists",
+
+        122: "Invalid phone number format",
+        123: "Identifier is required",
+
+        130: "Email not found",
+        131: "Profile Fetched Succesfully",
+
+        500: "Internal server error",
+        501: "Page not found",
+        502: "Invalid request format",
+        504: "Authentication required",
+        505: "Method not allowed",
+        506: "Permission denied",
+        507: "Validation error",
+        508: "Required field missing",
         509: "Invalid or expired token",
+
+
+
+        #otp related codes
+
+        #success codes
+        850: "OTP verified successfully",
+        851: "OTP sent successfully",
+
+
+        #error codes
+        801: "OTP limit reached for today. Try again tomorrow.",
+        802: "OTP already sent recently. Please wait before requesting again.",
+        803: "OTP expired or invalid",
+        804: "Invalid OTP",
+        805: "This phone number is already in use by another account",
+
+
+        #token related codes
+
+        #error codes
+        901: "Invalid token claims",
+        902: "Token has expired",
+        903: "Token invalidated",
+        904: "Token has expired",
+        905: "Invalid Token"
+
+
     }

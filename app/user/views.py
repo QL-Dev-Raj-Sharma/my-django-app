@@ -16,9 +16,9 @@ class RegisterView(APIView):
     def _get_status_code(self, validated_data):
 
         return (
-            138 if 'password' in validated_data else
-            125 if validated_data.get('otp') else
-            124
+            101 if 'password' in validated_data else
+            850 if validated_data.get('otp') else
+            851
         )
     
     def post(self, request):
@@ -40,7 +40,12 @@ class LoginView(APIView):
         
         user_login_info = serializer.save()
         
-        return Responder.send(139, user_login_info)
+        return Responder.send(110,user_login_info)
+    
+class LogoutView(APIView):
+    def post(self, request):
+        request.user.logout()
+        return Responder.send(111)
     
 class ChangePasswordView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -54,7 +59,7 @@ class ChangePasswordView(APIView):
         
         result = serializer.save()
         
-        return Responder.send(140, result)
+        return Responder.send(112, result)
 
 
 class ForgotPasswordView(APIView):
@@ -63,9 +68,9 @@ class ForgotPasswordView(APIView):
     def _get_status_code(self, validated_data):
     
         return (
-            141 if 'new_password' in validated_data else
-            125 if validated_data.get('otp') and 'new_password' not in validated_data else
-            124
+            113 if 'new_password' in validated_data else
+            850 if validated_data.get('otp') and 'new_password' not in validated_data else
+            851
         )
     
     def post(self, request):
@@ -83,16 +88,16 @@ class UserProfileView(APIView):
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
-        return Responder.send(code=142, data=serializer.data)
+        return Responder.send(code=114, data=serializer.data)
     def patch(self, request):
         serializer = UserProfileSerializer(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Responder.send(code=143, data=serializer.data)
+        return Responder.send(115,serializer.data)
 
     def delete(self, request):
         request.user.delete()
-        return Responder.send(code=303)
+        return Responder.send(116)
 
 
 
@@ -105,9 +110,9 @@ class PublicUserProfileView(APIView):
         user = User.objects.get_by_username(username)
         
         if not user:
-            return Responder.raise_error(157)
+            return Responder.raise_error(118)
         
         serializer = PublicUserProfileSerializer(user)
         
-        return Responder.send(144, serializer.data)
+        return Responder.send(131,serializer.data)
     
