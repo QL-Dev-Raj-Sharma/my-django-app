@@ -30,11 +30,11 @@ class UserTokenAuthentication(BaseAuthentication):
             
         
             if user.access_token_created_at != payload['iat']:
-                Responder.raise_error(903)
+                Responder.raise_error(901)
                 
             return (user, None)
             
         except jwt.ExpiredSignatureError:
-            Responder.raise_error(904)
+            Responder.raise_error(902)
         except (jwt.InvalidTokenError, User.DoesNotExist):
-            Responder.raise_error(905)
+            Responder.raise_error(901)

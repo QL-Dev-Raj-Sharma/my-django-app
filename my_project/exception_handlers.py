@@ -45,6 +45,7 @@ def handle_validation_error(exception):
         response_code = response_code[0]   
     if isinstance(response_code, str):
         response_code = Constant.django_default_codes.get(response_code, 507)
+        
     
     return response_code
 

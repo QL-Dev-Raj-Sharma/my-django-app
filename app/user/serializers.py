@@ -3,6 +3,7 @@ import time
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
+from django.db.models import Q
 from rest_framework import serializers
 from .models import User, RegistrationOtp
 from .models import User
@@ -14,18 +15,30 @@ from utils import (
 
 
 
-class RegisterSerializer(serializers.Serializer):
-    username = serializers.CharField(max_length=150, write_only=True, required=False)
+class RegisterSerializer(serializers.ModelSerializer):
+    confirm_password = serializers.CharField(write_only=True, required=False)
+    otp = serializers.CharField(write_only=True, required=False)
+
     email = serializers.EmailField(write_only=True, required=True)
-    phone = serializers.CharField(max_length=15, write_only=True, required=False)
-    first_name = serializers.CharField(max_length=50, write_only=True, required=False)
-    last_name = serializers.CharField(max_length=100, write_only=True, required=False)
-    bio = serializers.CharField(max_length=500, write_only=True, required=False)
-    password = serializers.CharField(max_length=128, write_only=True, required=False)
-    confirm_password = serializers.CharField(max_length=128, write_only=True, required=False)
-    otp = serializers.CharField(max_length=6, write_only=True, required=False)
+    username = serializers.CharField(write_only=True, required=False)
+    phone = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            'username', 'email', 'phone', 'first_name', 'last_name',
+            'bio', 'password', 'confirm_password', 'otp'
+        ]
+        extra_kwargs = {
+            'first_name': {'write_only': True, 'required': False},
+            'last_name': {'write_only': True, 'required': False},
+            'bio': {'write_only': True, 'required': False},
+            'password': {'write_only': True, 'required': False},
+        }
+
 
     def validate(self, attrs):
+    
         email = attrs['email']
         username = attrs.get('username')
         phone = attrs.get('phone', None)
@@ -33,16 +46,14 @@ class RegisterSerializer(serializers.Serializer):
         
         registration_otp = RegistrationOtp.objects.get_by_email(email)
         
+        self._validate_existing_user(email=email, username=username, phone=phone)
         if 'otp' in attrs:
-            self._validate_existing_user(email=email, username=username, phone=phone)
             self._validate_otp(registration_otp, attrs['otp'])
         elif not password:
-            self._validate_existing_user(email=email, username=username, phone=phone)
             if phone:
                 self._validate_phone_number(phone)
             self._handle_initial_registration(attrs, email, registration_otp)
         else:
-            self._validate_existing_user(email=email, username=username, phone=phone)
             if phone:
                 self._validate_phone_number(phone)
             if registration_otp:
@@ -61,18 +72,25 @@ class RegisterSerializer(serializers.Serializer):
         registration_otp.delete()
         return user.login('email')
 
-    def _validate_existing_user(self, **fields):
-        email = fields.get('email')
-        username = fields.get('username')  
-        phone = fields.get('phone')
+    def _validate_existing_user(self, email, username, phone):
+        conditions = Q()
+        if email:
+            conditions |= Q(email=email)
+        if username:
+            conditions |= Q(username=username)
+        if phone:
+            conditions |= Q(phone=phone)
         
-        if email and User.objects.get_by_email(email):
-            Responder.raise_error(119)
-        if username and User.objects.get_by_username(username):
-            Responder.raise_error(120)
+        if conditions:
+            existing_users = User.objects.filter(conditions).values('email', 'username', 'phone')
             
-        if phone and User.objects.filter(phone=phone).exists():
-            Responder.raise_error(121)
+            for user in existing_users:
+                if email and user['email'] == email:
+                    Responder.raise_error(119)
+                if username and user['username'] == username:
+                    Responder.raise_error(120)
+                if phone and user['phone'] == phone:
+                    Responder.raise_error(121)
 
     def _validate_phone_number(self, phone):
         if phone and (re.match(r'^\+(1|91)\d+', phone)):
@@ -136,6 +154,7 @@ class RegisterSerializer(serializers.Serializer):
         from_email = settings.DEFAULT_FROM_EMAIL
         recipient_list = [email]
         send_mail(subject, message, from_email, recipient_list)
+
 
 
 class UserLoginSerializer(serializers.Serializer):
@@ -267,23 +286,17 @@ class ForgotPasswordSerializer(serializers.Serializer):
         expiry_time = created_at + timedelta(minutes=minutes)
         return timezone.now() > expiry_time
 
-class UserProfileSerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
-    username = serializers.CharField(read_only=True)
-    email = serializers.EmailField(read_only=True)
-    phone = serializers.CharField(
-        max_length=15,
-        required=False,
-        allow_blank=True,
-        allow_null=True
-    )
-    first_name = serializers.CharField(required=False, allow_blank=True)
-    last_name = serializers.CharField(required=False, allow_blank=True)
+class UserProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
-    bio = serializers.CharField(required=False, allow_blank=True)
     profile_picture = serializers.URLField(required=False, allow_blank=True, write_only=True)
-    date_joined = serializers.DateTimeField(read_only=True)
-    last_login = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'phone', 'first_name', 'last_name',
+            'full_name', 'bio', 'profile_picture', 'date_joined', 'last_login'
+        ]
+        read_only_fields = ['id', 'username', 'email', 'date_joined', 'last_login']
 
     def get_full_name(self, user):
         return user.get_full_name()

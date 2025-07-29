@@ -63,7 +63,7 @@ class Constant:
         #error codes
         801: "OTP limit reached for today. Try again tomorrow.",
         802: "OTP already sent recently. Please wait before requesting again.",
-        803: "OTP expired or invalid",
+        803: "OTP expired",
         804: "Invalid OTP",
         805: "This phone number is already in use by another account",
 
@@ -71,11 +71,8 @@ class Constant:
         #token related codes
 
         #error codes
-        901: "Invalid token claims",
-        902: "Token has expired",
-        903: "Token invalidated",
-        904: "Token has expired",
-        905: "Invalid Token"
+        901: "Invalid token",
+        902: "Token has expired"
 
 
     }
