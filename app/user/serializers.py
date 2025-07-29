@@ -1,5 +1,5 @@
 import re
-import uuid
+import time
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
@@ -34,11 +34,9 @@ class RegisterSerializer(serializers.Serializer):
         registration_otp = RegistrationOtp.objects.get_by_email(email)
         
         if 'otp' in attrs:
-            # OTP verification step - check if user exists before verifying OTP
             self._validate_existing_user(email=email, username=username, phone=phone)
             self._validate_otp(registration_otp, attrs['otp'])
         elif not password:
-            # Initial registration step - check if user exists before sending OTP
             self._validate_existing_user(email=email, username=username, phone=phone)
             if phone:
                 self._validate_phone_number(phone)
@@ -83,9 +81,9 @@ class RegisterSerializer(serializers.Serializer):
 
     def _validate_otp(self, registration_otp, otp):
         if not registration_otp or self._is_otp_expired(registration_otp.created_at):
-            Responder.raise_error(117)  # "OTP expired or invalid"
+            Responder.raise_error(117)
         if registration_otp.otp != otp:
-            Responder.raise_error(804)  # "Invalid OTP"
+            Responder.raise_error(804)
 
     def _handle_initial_registration(self, attrs, email, registration_otp):
         otp = Generator.generate_otp()
@@ -197,8 +195,9 @@ class ChangePasswordSerializer(serializers.Serializer):
     def create(self, validated_data):
         user = validated_data['user']
         user.set_password(validated_data['new_password'])
+        user.access_token_created_at = int(time.time())
         user.save()
-        return {'message': 'Password changed successfully'}
+        return {'message': 'Password changed Please login again'}
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
@@ -228,9 +227,10 @@ class ForgotPasswordSerializer(serializers.Serializer):
         if 'new_password' in validated_data:
             user = validated_data['user']
             user.set_password(validated_data['new_password'])
+            user.access_token_created_at = int(time.time())
             user.save()
             RegistrationOtp.objects.filter(email=user.email).delete()
-            return {'message': 'Password changed successfully'}
+            return {'message': 'Password changed successfully Login again'}
         return {}
 
     def _handle_otp_sending(self, email):
@@ -293,7 +293,7 @@ class UserProfileSerializer(serializers.Serializer):
         if not value:
             return value
 
-        if not re.match(r'^\+?[1-9]\d{1,14}$', value):
+        if not re.match(r'^\+(1|91)\d+', value):
             Responder.raise_error(122)
             
         user = self.instance
@@ -306,7 +306,7 @@ class UserProfileSerializer(serializers.Serializer):
         user.first_name = validated_data.get('first_name', user.first_name)
         user.last_name = validated_data.get('last_name', user.last_name)
         user.bio = validated_data.get('bio', user.bio)
-        user.profile_picture = validated_data.get('profile_picture', user.profile_picture)
+
         
         if 'phone' in validated_data:
             phone = validated_data['phone']
